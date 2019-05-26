@@ -1,10 +1,17 @@
+using GraphQL;
+using GraphQL.Server;
+using GraphQL.Server.Ui.Playground;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SpaServices.ReactDevelopmentServer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WebApp5.GraphQL;
+using WebApp5.Models.DbContext;
+using WebApp5.Repository;
 
 namespace WebApp5
 {
@@ -27,10 +34,31 @@ namespace WebApp5
             {
                 configuration.RootPath = "ClientApp/build";
             });
+
+            // ******************************
+            // ********** OBAVEZNO **********
+            // ******************************
+            services.AddDbContext<AppContext>(options =>
+                options.UseSqlServer(Configuration.GetConnectionString("WebApp5Db")));
+            services.AddTransient<PersonRepository>();
+            //******< GraphQL Services >******
+            services.AddScoped<IDependencyResolver>(x =>
+                new FuncDependencyResolver(x.GetRequiredService));
+            services.AddScoped<WebApp5Schema>();
+            services.AddGraphQL(options =>
+            {
+                options.EnableMetrics = true;
+                // options.ExposeExceptions = this.Environment.IsDevelopment();
+                options.ExposeExceptions = true; //set true only in dev mode. //
+            })
+                .AddGraphTypes(ServiceLifetime.Scoped)
+                //.AddUserContextBuilder(httpContext => httpContext.User)
+                .AddDataLoader();
+            //******</ GraphQL Services >****** 
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, AppContext dbContext)
         {
             if (env.IsDevelopment())
             {
@@ -46,6 +74,10 @@ namespace WebApp5
             app.UseHttpsRedirection();
             app.UseStaticFiles();
             app.UseSpaStaticFiles();
+
+            //app.UseGraphQL<WebApp5Schema>("/graphql");
+            app.UseGraphQL<WebApp5Schema>();
+            app.UseGraphQLPlayground(new GraphQLPlaygroundOptions()); //to explorer API navigate https://*DOMAIN*/ui/playground
 
             app.UseMvc(routes =>
             {
